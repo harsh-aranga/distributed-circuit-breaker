@@ -1,0 +1,187 @@
+networks:
+  cb-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  # prometheus_data:
+  # grafana_data:
+
+services:
+  # ============================================
+  # CORE INFRASTRUCTURE (ACTIVE)
+  # ============================================
+
+  redis:
+    image: redis:8.4.0
+    container_name: redis
+    hostname: redis
+    networks:
+      - cb-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    container_name: redis-commander
+    hostname: redis-commander
+    networks:
+      - cb-network
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - HTTP_USER=${REDIS_COMMANDER_USER}
+      - HTTP_PASSWORD=${REDIS_COMMANDER_PASSWORD}
+      - READ_ONLY=false
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ============================================
+  # DEMO SERVICES (TODO: Uncomment when code ready)
+  # ============================================
+
+  # order-service-1:
+  #   build: ../demo-services/order-service
+  #   container_name: order-service-1
+  #   hostname: order-service-1
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "5001:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=docker
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - INSTANCE_ID=order-service-1
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # order-service-2:
+  #   build: ../demo-services/order-service
+  #   container_name: order-service-2
+  #   hostname: order-service-2
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "5002:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=docker
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - INSTANCE_ID=order-service-2
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # order-service-3:
+  #   build: ../demo-services/order-service
+  #   container_name: order-service-3
+  #   hostname: order-service-3
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "5003:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=docker
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - INSTANCE_ID=order-service-3
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # payment-service:
+  #   build: ../demo-services/payment-service
+  #   container_name: payment-service
+  #   hostname: payment-service
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "5011:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=docker
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # ============================================
+  # DASHBOARD (TODO: Uncomment when built)
+  # ============================================
+
+  # dashboard:
+  #   build: ../dashboard
+  #   container_name: dashboard
+  #   hostname: dashboard
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "5100:3000"
+  #   environment:
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # ============================================
+  # MONITORING (TODO: Uncomment for metrics)
+  # ============================================
+
+  # prometheus:
+  #   image: prom/prometheus:v3.9.1
+  #   container_name: prometheus
+  #   hostname: prometheus
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - prometheus_data:/prometheus
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #   profiles:
+  #     - monitoring
+  #   depends_on:
+  #     - order-service-1
+  #     - order-service-2
+  #     - order-service-3
+
+  # grafana:
+  #   image: grafana/grafana:12.3.2
+  #   container_name: grafana
+  #   hostname: grafana
+  #   networks:
+  #     - cb-network
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ../config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+  #     - ../config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+  #   profiles:
+  #     - monitoring
+  #   depends_on:
+  #     - prometheus
